@@ -1,8 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.todoapp.ipad',
-  appName: 'Todo App',
+  appId: 'com.flightlog.ipad',
+  appName: 'Flight Log',
   webDir: 'dist',
   server: {
     android: {

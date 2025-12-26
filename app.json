@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "ac605d6d-43e3-477c-80fd-5ddbd24c370d"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.jtorba.ipadapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

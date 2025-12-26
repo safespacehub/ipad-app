@@ -1,7 +1,7 @@
 {
-  "name": "Todo App",
-  "short_name": "Todo",
-  "description": "A beautiful todo app optimized for iPad",
+  "name": "Flight Log",
+  "short_name": "Flight Log",
+  "description": "Flight data entry app for pilots - track multi-leg flights with cargo, fuel, and performance data",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
