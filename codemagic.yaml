@@ -5,10 +5,14 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       groups:
-        - app_store_credentials
+        - app_store_credentials  # Add your Apple Developer credentials here in Codemagic dashboard
       vars:
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
+        # These will be set automatically by Codemagic when credentials are configured
+        # APPLE_ID: your-apple-id@example.com
+        # APPLE_APP_SPECIFIC_PASSWORD: your-app-specific-password
+        # APPLE_TEAM_ID: your-team-id
       xcode: latest
       node: 22
     scripts:
@@ -179,7 +183,7 @@ workflows:
             fi
           fi
           echo "✅ iOS project structure verified"
-      - name: Set up code signing settings on Xcode project
+      - name: Set up code signing
         script: |
           cd ios/App
           # Check if using workspace or project
@@ -188,26 +192,38 @@ workflows:
           else
             XCODE_BUILD_ARG="-project App.xcodeproj"
           fi
-          # Disable code signing for development builds
-          xcodebuild $XCODE_BUILD_ARG \
-            -scheme App \
-            -configuration Release \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            -showBuildSettings | grep -i "code_sign" || echo "Code signing settings applied"
-          # Also update the project file directly to disable signing
-          if [ -f "App.xcodeproj/project.pbxproj" ]; then
-            echo "Updating project file to disable code signing..."
-            # Use sed to disable code signing in project file
-            sed -i '' 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || \
-            sed -i 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || true
-            sed -i '' 's/CODE_SIGN_IDENTITY = .*/CODE_SIGN_IDENTITY = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || \
-            sed -i 's/CODE_SIGN_IDENTITY = .*/CODE_SIGN_IDENTITY = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || true
-            sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' App.xcodeproj/project.pbxproj 2>/dev/null || \
-            sed -i 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' App.xcodeproj/project.pbxproj 2>/dev/null || true
+          
+          # Check if Apple Developer credentials are available
+          if [ -n "$APPLE_TEAM_ID" ] && [ -n "$CM_CERTIFICATE" ]; then
+            echo "✅ Apple Developer credentials found - using proper code signing"
+            # Codemagic will handle code signing automatically when credentials are configured
+            # Just verify the settings
+            xcodebuild $XCODE_BUILD_ARG \
+              -scheme App \
+              -configuration Release \
+              -showBuildSettings | grep -i "code_sign" || echo "Code signing will be handled by Codemagic"
+          else
+            echo "⚠️  No Apple Developer credentials found - building unsigned (for development)"
+            # Disable code signing for development builds
+            xcodebuild $XCODE_BUILD_ARG \
+              -scheme App \
+              -configuration Release \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              DEVELOPMENT_TEAM="" \
+              PROVISIONING_PROFILE_SPECIFIER="" \
+              -showBuildSettings | grep -i "code_sign" || echo "Code signing disabled"
+            # Update project file for unsigned build
+            if [ -f "App.xcodeproj/project.pbxproj" ]; then
+              echo "Updating project file to disable code signing..."
+              sed -i '' 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || \
+              sed -i 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || true
+              sed -i '' 's/CODE_SIGN_IDENTITY = .*/CODE_SIGN_IDENTITY = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || \
+              sed -i 's/CODE_SIGN_IDENTITY = .*/CODE_SIGN_IDENTITY = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || true
+              sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' App.xcodeproj/project.pbxproj 2>/dev/null || \
+              sed -i 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' App.xcodeproj/project.pbxproj 2>/dev/null || true
+            fi
           fi
           cd ../..
       - name: Build ipa for distribution
@@ -232,16 +248,28 @@ workflows:
           fi
           echo "Proceeding with build..."
           mkdir -p build
-          xcodebuild $WORKSPACE_ARG \
-            -scheme App \
-            -configuration Release \
-            -destination generic/platform=iOS \
-            -archivePath build/App.xcarchive \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            archive
+          # Build with or without code signing based on credentials
+          if [ -n "$APPLE_TEAM_ID" ] && [ -n "$CM_CERTIFICATE" ]; then
+            echo "Building with code signing (App Store ready)..."
+            xcodebuild $WORKSPACE_ARG \
+              -scheme App \
+              -configuration Release \
+              -destination generic/platform=iOS \
+              -archivePath build/App.xcarchive \
+              archive
+          else
+            echo "Building unsigned (development only)..."
+            xcodebuild $WORKSPACE_ARG \
+              -scheme App \
+              -configuration Release \
+              -destination generic/platform=iOS \
+              -archivePath build/App.xcarchive \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              DEVELOPMENT_TEAM="" \
+              archive
+          fi
           # Verify archive was created
           if [ ! -d "build/App.xcarchive" ]; then
             echo "ERROR: Archive was not created at build/App.xcarchive"
@@ -250,13 +278,33 @@ workflows:
             exit 1
           fi
           echo "Archive created successfully at build/App.xcarchive"
-      - name: Create ExportOptions.plist if needed
+      - name: Create ExportOptions.plist
         script: |
-          if [ ! -f "ios/App/ExportOptions.plist" ]; then
-            mkdir -p ios/App
-          fi
-          # Create ExportOptions.plist for development export (no signing)
-          cat > ios/App/ExportOptions.plist << 'EOF'
+          mkdir -p ios/App
+          # Check if we have Apple Developer credentials for App Store distribution
+          if [ -n "$APPLE_TEAM_ID" ] && [ -n "$CM_CERTIFICATE" ]; then
+            echo "Creating ExportOptions.plist for App Store distribution..."
+            cat > ios/App/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          	<key>method</key>
+          	<string>app-store</string>
+          	<key>teamID</key>
+          	<string>${APPLE_TEAM_ID}</string>
+          	<key>signingStyle</key>
+          	<string>automatic</string>
+          	<key>compileBitcode</key>
+          	<false/>
+          	<key>manageAppVersionAndBuildNumber</key>
+          	<true/>
+          </dict>
+          </plist>
+          EOF
+          else
+            echo "Creating ExportOptions.plist for development export (unsigned)..."
+            cat > ios/App/ExportOptions.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -272,7 +320,8 @@ workflows:
           </dict>
           </plist>
           EOF
-          echo "✅ ExportOptions.plist created/updated"
+          fi
+          echo "✅ ExportOptions.plist created"
       - name: Verify archive exists before export
         script: |
           if [ ! -d "ios/App/build/App.xcarchive" ]; then
