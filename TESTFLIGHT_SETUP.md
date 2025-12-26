@@ -37,7 +37,7 @@ With your Apple Developer account, you can distribute your app via TestFlight!
    - Platform: iOS
    - Name: "Flight Log" (or your preferred name)
    - Primary Language: English
-   - Bundle ID: `com.flightlog.ipad` (matches your capacitor.config.ts)
+   - Bundle ID: `com.jtorba.ipadapp` (matches your capacitor.config.ts)
    - SKU: Any unique identifier (e.g., "flight-log-001")
    - User Access: Full Access
 

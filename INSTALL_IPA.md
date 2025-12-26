@@ -15,7 +15,7 @@ Congratulations! You've built your iOS app. Now here's how to install it on your
 
 2. **Create app in App Store Connect**:
    - Go to [appstoreconnect.apple.com](https://appstoreconnect.apple.com)
-   - Create new app with Bundle ID: `com.flightlog.ipad`
+   - Create new app with Bundle ID: `com.jtorba.ipadapp`
    - See `TESTFLIGHT_SETUP.md` for detailed steps
 
 3. **Build and upload**:
