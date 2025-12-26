@@ -68,42 +68,52 @@ workflows:
             echo "Contents of ios directory:"
             ls -la ios/
           fi
-          # Check for Podfile in multiple possible locations
-          echo "Checking for Podfile..."
-          if [ -f "ios/App/Podfile" ]; then
-            echo "✅ Podfile found at ios/App/Podfile"
+          # Capacitor 8 uses Swift Package Manager, not CocoaPods
+          # Check for Package.swift or Podfile (for older versions)
+          echo "Checking for iOS project files..."
+          if [ -f "ios/App/Package.swift" ]; then
+            echo "✅ Package.swift found (Capacitor 8 - Swift Package Manager)"
+          elif [ -f "ios/App/Podfile" ]; then
+            echo "✅ Podfile found (older Capacitor version - CocoaPods)"
           elif [ -f "ios/Podfile" ]; then
-            echo "✅ Podfile found at ios/Podfile"
+            echo "✅ Podfile found at ios/Podfile (older Capacitor version)"
           else
-            echo "❌ Podfile not found in expected locations"
-            echo "Searching for Podfile:"
-            find ios -name "Podfile" 2>/dev/null || echo "No Podfile found anywhere"
-            echo "Contents of ios directory:"
-            ls -la ios/ || echo "ios directory doesn't exist"
-            if [ -d "ios" ]; then
-              echo "Contents of ios subdirectories:"
-              find ios -type d -maxdepth 2 | head -20
-            fi
-            echo "Attempting to re-add iOS platform..."
-            rm -rf ios
-            npx cap add ios || {
-              echo "Failed to re-add iOS platform"
-              exit 1
-            }
-            # Check again after re-adding
-            if [ -f "ios/App/Podfile" ]; then
-              echo "✅ Podfile found after re-adding"
-            elif [ -f "ios/Podfile" ]; then
-              echo "✅ Podfile found at ios/Podfile after re-adding"
+            echo "⚠️  Neither Package.swift nor Podfile found"
+            echo "Searching for project files:"
+            find ios -name "Package.swift" 2>/dev/null || echo "No Package.swift found"
+            find ios -name "Podfile" 2>/dev/null || echo "No Podfile found"
+            echo "Contents of ios/App:"
+            ls -la ios/App/ 2>/dev/null || echo "ios/App doesn't exist"
+            # For Capacitor 8, Package.swift might be optional or in a different location
+            # Check if we have the Xcode project at least
+            if [ -f "ios/App/App.xcodeproj/project.pbxproj" ]; then
+              echo "✅ Xcode project found, continuing (Capacitor 8 may not need Package.swift)"
             else
-              echo "❌ Podfile still not found after re-adding"
-              echo "This indicates a problem with Capacitor iOS platform initialization"
-              exit 1
+              echo "❌ Xcode project not found either"
+              echo "Attempting to re-add iOS platform..."
+              rm -rf ios
+              npx cap add ios || {
+                echo "Failed to re-add iOS platform"
+                exit 1
+              }
+              # Check again after re-adding
+              if [ -f "ios/App/Package.swift" ] || [ -f "ios/App/App.xcodeproj/project.pbxproj" ]; then
+                echo "✅ iOS project structure found after re-adding"
+              else
+                echo "❌ iOS project structure still not found after re-adding"
+                exit 1
+              fi
             fi
           fi
-      - name: Install CocoaPods (if needed)
+      - name: Install CocoaPods (only if Podfile exists)
         script: |
-          which pod || gem install cocoapods
+          # Capacitor 8 uses Swift Package Manager, so CocoaPods is only needed for older versions
+          if [ -f "ios/App/Podfile" ] || [ -f "ios/Podfile" ]; then
+            echo "Podfile found, installing CocoaPods..."
+            which pod || gem install cocoapods
+          else
+            echo "No Podfile found - using Swift Package Manager (Capacitor 8)"
+          fi
       - name: Sync Capacitor
         script: |
           echo "Syncing Capacitor iOS platform..."
@@ -112,14 +122,16 @@ workflows:
             ls -la ios/ || echo "ios directory doesn't exist"
             if [ -d "ios/App" ]; then
               ls -la ios/App/ || echo "Cannot list ios/App contents"
-              if [ -f "ios/App/Podfile" ]; then
+              # Only run pod install if Podfile exists (older Capacitor versions)
+              if [ -f "ios/App/Podfile" ] || [ -f "ios/Podfile" ]; then
                 echo "Podfile exists, attempting manual pod install..."
                 cd ios/App
                 pod install
                 cd ../..
               else
-                echo "Podfile not found at ios/App/Podfile"
-                find ios -name "Podfile" 2>/dev/null || echo "No Podfile found anywhere"
+                echo "No Podfile found - using Swift Package Manager"
+                echo "Checking for Package.swift:"
+                find ios -name "Package.swift" 2>/dev/null || echo "No Package.swift found"
               fi
             fi
             exit 1
@@ -132,31 +144,41 @@ workflows:
             exit 1
           fi
           echo "Checking for required files..."
-          if [ ! -f "ios/App/Podfile" ]; then
-            echo "ERROR: Podfile not found at ios/App/Podfile"
-            exit 1
-          fi
-          if [ ! -f "ios/App/App.xcworkspace/contents.xcworkspacedata" ]; then
-            echo "WARNING: App.xcworkspace not found, running pod install..."
-            cd ios/App
-            pod install || {
-              echo "pod install failed"
-              echo "Contents of ios/App:"
-              ls -la
+          # Capacitor 8 uses Swift Package Manager, not CocoaPods
+          if [ -f "ios/App/Podfile" ]; then
+            echo "✅ Podfile found (older Capacitor version)"
+            # For CocoaPods, we need the workspace
+            if [ ! -f "ios/App/App.xcworkspace/contents.xcworkspacedata" ]; then
+              echo "WARNING: App.xcworkspace not found, running pod install..."
+              cd ios/App
+              pod install || {
+                echo "pod install failed"
+                echo "Contents of ios/App:"
+                ls -la
+                exit 1
+              }
+              cd ../..
+            fi
+          elif [ -f "ios/App/Package.swift" ]; then
+            echo "✅ Package.swift found (Capacitor 8 - Swift Package Manager)"
+            # For Swift Package Manager, we use the .xcodeproj directly, not .xcworkspace
+            if [ ! -f "ios/App/App.xcodeproj/project.pbxproj" ]; then
+              echo "ERROR: App.xcodeproj not found"
               exit 1
-            }
-            cd ../..
-          fi
-          if [ ! -f "ios/App/App.xcworkspace/contents.xcworkspacedata" ]; then
-            echo "ERROR: App.xcworkspace still not found after pod install"
-            echo "Contents of ios/App:"
-            ls -la ios/App/
-            echo "Searching for workspace files:"
-            find ios -name "*.xcworkspace" -type d 2>/dev/null || echo "No workspace files found"
-            exit 1
+            fi
+          else
+            echo "⚠️  Neither Podfile nor Package.swift found"
+            echo "Checking for Xcode project..."
+            if [ -f "ios/App/App.xcodeproj/project.pbxproj" ]; then
+              echo "✅ Xcode project found, continuing"
+            else
+              echo "ERROR: No Xcode project found"
+              echo "Contents of ios/App:"
+              ls -la ios/App/
+              exit 1
+            fi
           fi
           echo "✅ iOS project structure verified"
-          echo "Workspace found at: ios/App/App.xcworkspace"
       - name: Set up code signing settings on Xcode project
         script: |
           xcodebuild -project ios/App/App.xcodeproj \
@@ -167,19 +189,26 @@ workflows:
       - name: Build ipa for distribution
         script: |
           cd ios/App
-          # Verify workspace exists
-          if [ ! -f "App.xcworkspace/contents.xcworkspacedata" ]; then
-            echo "ERROR: App.xcworkspace not found in ios/App/"
+          # Check if we're using CocoaPods (workspace) or Swift Package Manager (project)
+          if [ -f "App.xcworkspace/contents.xcworkspacedata" ]; then
+            echo "✅ Using CocoaPods workspace"
+            WORKSPACE_ARG="-workspace App.xcworkspace"
+          elif [ -f "App.xcodeproj/project.pbxproj" ]; then
+            echo "✅ Using Swift Package Manager project"
+            WORKSPACE_ARG="-project App.xcodeproj"
+          else
+            echo "ERROR: Neither workspace nor project found in ios/App/"
             echo "Current directory: $(pwd)"
             echo "Contents:"
             ls -la
-            echo "Searching for workspace:"
+            echo "Searching for workspace/project:"
             find . -name "*.xcworkspace" -type d 2>/dev/null || echo "No workspace found"
+            find . -name "*.xcodeproj" -type d 2>/dev/null || echo "No project found"
             exit 1
           fi
-          echo "✅ Workspace found, proceeding with build..."
+          echo "Proceeding with build..."
           mkdir -p build
-          xcodebuild -workspace App.xcworkspace \
+          xcodebuild $WORKSPACE_ARG \
             -scheme App \
             -configuration Release \
             -destination generic/platform=iOS \
