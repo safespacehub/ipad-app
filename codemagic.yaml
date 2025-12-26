@@ -4,7 +4,7 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m1
     integrations:
-      app_store_connect: App Store Connect API Key  # Name of your App Store Connect integration in Codemagic
+      app_store_connect: hey  # Update this name to match your integration in Codemagic
     environment:
       groups:
         - app_store_credentials  # Add your Apple Developer credentials here in Codemagic dashboard
@@ -400,15 +400,17 @@ workflows:
           success: true
           failure: false
       # Codemagic's built-in App Store Connect publishing
-      # First: Set up App Store Connect integration in Codemagic dashboard:
-      #   Teams → Integrations → App Store Connect → Add integration
-      #   Provide: Issuer ID, Key ID, and upload the .p8 API key file
-      # Then: Reference it in the integrations section above
+      # STEP 1: Create App Store Connect integration in Codemagic dashboard:
+      #   - Go to Codemagic → Teams → Integrations → App Store Connect
+      #   - Click "Add integration"
+      #   - Name it (e.g., "App Store Connect API Key")
+      #   - Enter: Issuer ID, Key ID, upload .p8 file
+      #   - Save
+      # After creating the integration, uncomment the section below:
       app_store_connect:
-        auth: integration  # References the integration configured in Codemagic dashboard
+        auth: integration
         submit_to_testflight: true
         # Optional: Specify beta groups to automatically add build to
         # beta_groups:
         #   - Internal Testers
-        #   - External Testers
 
