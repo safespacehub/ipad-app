@@ -181,11 +181,35 @@ workflows:
           echo "✅ iOS project structure verified"
       - name: Set up code signing settings on Xcode project
         script: |
-          xcodebuild -project ios/App/App.xcodeproj \
+          cd ios/App
+          # Check if using workspace or project
+          if [ -f "App.xcworkspace/contents.xcworkspacedata" ]; then
+            XCODE_BUILD_ARG="-workspace App.xcworkspace"
+          else
+            XCODE_BUILD_ARG="-project App.xcodeproj"
+          fi
+          # Disable code signing for development builds
+          xcodebuild $XCODE_BUILD_ARG \
             -scheme App \
+            -configuration Release \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            -showBuildSettings | grep -i "code_sign" || echo "Code signing settings applied"
+          # Also update the project file directly to disable signing
+          if [ -f "App.xcodeproj/project.pbxproj" ]; then
+            echo "Updating project file to disable code signing..."
+            # Use sed to disable code signing in project file
+            sed -i '' 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || \
+            sed -i 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || true
+            sed -i '' 's/CODE_SIGN_IDENTITY = .*/CODE_SIGN_IDENTITY = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || \
+            sed -i 's/CODE_SIGN_IDENTITY = .*/CODE_SIGN_IDENTITY = "";/g' App.xcodeproj/project.pbxproj 2>/dev/null || true
+            sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' App.xcodeproj/project.pbxproj 2>/dev/null || \
+            sed -i 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' App.xcodeproj/project.pbxproj 2>/dev/null || true
+          fi
+          cd ../..
       - name: Build ipa for distribution
         script: |
           cd ios/App
@@ -213,6 +237,10 @@ workflows:
             -configuration Release \
             -destination generic/platform=iOS \
             -archivePath build/App.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
             archive
           # Verify archive was created
           if [ ! -d "build/App.xcarchive" ]; then
