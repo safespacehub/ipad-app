@@ -1,52 +1,74 @@
-# ExportOptions.plist Fix
+# Export IPA Fix
 
 ## Problem
 
-Build was failing with:
+Export was failing with:
 ```
-error: Couldn't load -exportOptionsPlist The file "ExportOptions.plist" couldn't be opened because there is no such file.
+error: exportArchive "teamID" should be non-empty
+** EXPORT FAILED **
 ```
+
+The ExportOptions.plist had an empty `teamID` field, which xcodebuild requires to be non-empty for export.
 
 ## Solution
 
-✅ Created `ios/App/ExportOptions.plist` file
-✅ Updated both build scripts to auto-create it if missing
+### Updated ExportOptions.plist
 
-## What Was Done
+Removed the empty `teamID` field and changed:
+- `signingStyle` from `automatic` to `manual` (for unsigned builds)
+- Removed empty `teamID` field (not needed for manual signing)
+- Added `manageAppVersionAndBuildNumber` set to `false`
 
-1. **Created ExportOptions.plist** (`ios/App/ExportOptions.plist`)
-   - Set to `development` distribution (for testing)
-   - Uses automatic code signing
-   - Suitable for development builds
+### Alternative Export Method
 
-2. **Updated Codemagic** (`codemagic.yaml`)
-   - Added step to create ExportOptions.plist if it doesn't exist
-   - Ensures the file is always available
+Since unsigned development builds can't use the standard export method, added a fallback:
+1. **Try standard export first** - Uses ExportOptions.plist
+2. **If export fails** - Extract app from archive and create IPA manually
+3. **Manual IPA creation**:
+   - Extract `App.app` from the archive
+   - Create `Payload/` directory
+   - Copy app into Payload
+   - Zip as `App.ipa`
 
-3. **Updated GitHub Actions** (`.github/workflows/ios-build.yml`)
-   - Same auto-creation logic
-   - Ensures consistency across build platforms
+## Updated ExportOptions.plist
 
-## Current Configuration
+```xml
+<dict>
+  <key>method</key>
+  <string>development</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>compileBitcode</key>
+  <false/>
+  <key>manageAppVersionAndBuildNumber</key>
+  <false/>
+</dict>
+```
 
-The ExportOptions.plist is configured for **development** distribution:
-- ✅ Works for testing on your own devices
-- ✅ No Apple Developer account required (for basic testing)
-- ✅ Automatic code signing
+Note: No `teamID` field - not needed for manual signing.
 
-## For App Store Submission
+## Export Flow
 
-If you want to submit to the App Store later, you'll need to:
-1. Update `method` to `app-store`
-2. Add your Apple Developer Team ID
-3. Configure proper code signing certificates
+1. **Try xcodebuild export** - Standard method
+2. **If fails** - Fall back to manual IPA creation
+3. **Extract app** from archive
+4. **Create IPA** manually using zip
+5. **Verify** IPA was created
 
-See `ios/App/ExportOptions.plist.README.md` for details.
+## For Production Builds
+
+For App Store submission, you'll need to:
+1. Add proper `teamID` to ExportOptions.plist
+2. Set up code signing certificates
+3. Use `method` = `app-store`
+4. Use proper signing style
 
 ## Next Build
 
-The build should now complete successfully! The ExportOptions.plist file will be:
-- Created automatically if missing
-- Used to export the IPA file
-- Configured for development distribution
+The build should now:
+- ✅ Try standard export first
+- ✅ Fall back to manual IPA creation if needed
+- ✅ Create IPA file successfully
+- ✅ Verify IPA was created
 
+The build should complete successfully! 🎉
