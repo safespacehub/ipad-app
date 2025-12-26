@@ -30,14 +30,52 @@ jobs:
       - name: Install Capacitor CLI
         run: npm install -g @capacitor/cli
       
+      - name: Initialize Capacitor (if needed)
+        run: |
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            echo "Capacitor not initialized, but config file exists - continuing"
+          fi
+      
       - name: Add iOS platform (if not exists)
         run: |
           if [ ! -d "ios" ]; then
+            echo "Adding iOS platform..."
+            npx cap add ios
+          else
+            echo "iOS platform already exists"
+          fi
+          # Verify Podfile exists
+          if [ ! -f "ios/App/Podfile" ] && [ ! -f "ios/Podfile" ]; then
+            echo "Warning: Podfile not found after adding iOS platform"
+            echo "Attempting to re-add iOS platform..."
+            rm -rf ios
             npx cap add ios
           fi
       
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
+      
       - name: Sync Capacitor
-        run: npx cap sync ios
+        run: |
+          echo "Syncing Capacitor iOS platform..."
+          npx cap sync ios || {
+            echo "Sync failed, checking iOS project structure..."
+            ls -la ios/ || echo "ios directory doesn't exist"
+            if [ -d "ios/App" ]; then
+              ls -la ios/App/ || echo "Cannot list ios/App contents"
+              if [ -f "ios/App/Podfile" ]; then
+                echo "Podfile exists, attempting manual pod install..."
+                cd ios/App
+                pod install
+                cd ../..
+              else
+                echo "Podfile not found at ios/App/Podfile"
+                find ios -name "Podfile" 2>/dev/null || echo "No Podfile found anywhere"
+              fi
+            fi
+            exit 1
+          }
       
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
