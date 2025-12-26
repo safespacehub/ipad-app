@@ -18,28 +18,88 @@ workflows:
       - name: Build web app
         script: |
           npm run build
+          # Verify dist directory was created
+          if [ ! -d "dist" ]; then
+            echo "ERROR: dist directory was not created by build"
+            exit 1
+          fi
+          echo "✅ Web app built successfully"
+          echo "Dist directory contents:"
+          ls -la dist/ | head -10
       - name: Install Capacitor CLI
         script: |
           npm install -g @capacitor/cli
-      - name: Initialize Capacitor (if needed)
+          echo "Capacitor CLI version:"
+          npx cap --version
+      - name: Verify Capacitor configuration
         script: |
-          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
-            echo "Capacitor not initialized, but config file exists - continuing"
+          echo "Checking Capacitor configuration..."
+          if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
+            echo "ERROR: Capacitor config file not found"
+            echo "Looking for config files:"
+            ls -la capacitor.config.* 2>/dev/null || echo "No capacitor config files found"
+            exit 1
+          fi
+          echo "✅ Capacitor config found"
+          if [ -f "capacitor.config.ts" ]; then
+            echo "Using capacitor.config.ts"
+            cat capacitor.config.ts
           fi
       - name: Add iOS platform (if not exists)
         script: |
+          echo "Checking for iOS platform..."
           if [ ! -d "ios" ]; then
-            echo "Adding iOS platform..."
-            npx cap add ios
+            echo "iOS directory doesn't exist, adding platform..."
+            echo "Current directory: $(pwd)"
+            echo "Checking Capacitor config..."
+            ls -la capacitor.config.* 2>/dev/null || echo "No capacitor config found"
+            echo "Checking dist directory..."
+            ls -la dist/ 2>/dev/null || echo "dist directory doesn't exist"
+            npx cap add ios || {
+              echo "Failed to add iOS platform"
+              echo "Capacitor version:"
+              npx cap --version || echo "Cannot get Capacitor version"
+              exit 1
+            }
+            echo "iOS platform added, checking structure..."
+            ls -la ios/ || echo "ios directory still doesn't exist"
           else
             echo "iOS platform already exists"
+            echo "Contents of ios directory:"
+            ls -la ios/
           fi
-          # Verify Podfile exists
-          if [ ! -f "ios/App/Podfile" ] && [ ! -f "ios/Podfile" ]; then
-            echo "Warning: Podfile not found after adding iOS platform"
+          # Check for Podfile in multiple possible locations
+          echo "Checking for Podfile..."
+          if [ -f "ios/App/Podfile" ]; then
+            echo "✅ Podfile found at ios/App/Podfile"
+          elif [ -f "ios/Podfile" ]; then
+            echo "✅ Podfile found at ios/Podfile"
+          else
+            echo "❌ Podfile not found in expected locations"
+            echo "Searching for Podfile:"
+            find ios -name "Podfile" 2>/dev/null || echo "No Podfile found anywhere"
+            echo "Contents of ios directory:"
+            ls -la ios/ || echo "ios directory doesn't exist"
+            if [ -d "ios" ]; then
+              echo "Contents of ios subdirectories:"
+              find ios -type d -maxdepth 2 | head -20
+            fi
             echo "Attempting to re-add iOS platform..."
             rm -rf ios
-            npx cap add ios
+            npx cap add ios || {
+              echo "Failed to re-add iOS platform"
+              exit 1
+            }
+            # Check again after re-adding
+            if [ -f "ios/App/Podfile" ]; then
+              echo "✅ Podfile found after re-adding"
+            elif [ -f "ios/Podfile" ]; then
+              echo "✅ Podfile found at ios/Podfile after re-adding"
+            else
+              echo "❌ Podfile still not found after re-adding"
+              echo "This indicates a problem with Capacitor iOS platform initialization"
+              exit 1
+            fi
           fi
       - name: Install CocoaPods (if needed)
         script: |
