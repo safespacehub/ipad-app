@@ -74,12 +74,21 @@ workflows:
       - name: Build ipa for distribution
         script: |
           cd ios/App
+          mkdir -p build
           xcodebuild -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -destination generic/platform=iOS \
             -archivePath build/App.xcarchive \
-            archive | xcpretty
+            archive
+          # Verify archive was created
+          if [ ! -d "build/App.xcarchive" ]; then
+            echo "ERROR: Archive was not created at build/App.xcarchive"
+            echo "Contents of build directory:"
+            ls -la build/ || echo "build directory doesn't exist"
+            exit 1
+          fi
+          echo "Archive created successfully at build/App.xcarchive"
       - name: Create ExportOptions.plist if needed
         script: |
           if [ ! -f "ios/App/ExportOptions.plist" ]; then
@@ -101,12 +110,33 @@ workflows:
           </plist>
           EOF
           fi
+      - name: Verify archive exists before export
+        script: |
+          if [ ! -d "ios/App/build/App.xcarchive" ]; then
+            echo "ERROR: Archive not found at ios/App/build/App.xcarchive"
+            echo "Searching for archive files..."
+            find ios -name "*.xcarchive" -type d 2>/dev/null || echo "No .xcarchive files found"
+            echo "Contents of ios/App/build:"
+            ls -la ios/App/build/ 2>/dev/null || echo "ios/App/build directory doesn't exist"
+            exit 1
+          fi
+          echo "Archive found, proceeding with export..."
       - name: Export IPA
         script: |
+          mkdir -p ios/App/build/export
           xcodebuild -exportArchive \
             -archivePath ios/App/build/App.xcarchive \
             -exportPath ios/App/build/export \
             -exportOptionsPlist ios/App/ExportOptions.plist
+          # Verify IPA was created
+          if [ ! -f "ios/App/build/export/*.ipa" ]; then
+            echo "WARNING: IPA file may not have been created"
+            echo "Contents of export directory:"
+            ls -la ios/App/build/export/ || echo "export directory is empty or doesn't exist"
+          else
+            echo "IPA exported successfully"
+            ls -lh ios/App/build/export/*.ipa
+          fi
     artifacts:
       - ios/App/build/export/*.ipa
     publishing:

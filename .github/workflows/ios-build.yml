@@ -85,12 +85,21 @@ jobs:
       - name: Build iOS app
         run: |
           cd ios/App
+          mkdir -p build
           xcodebuild -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath build/App.xcarchive \
             archive
+          # Verify archive was created
+          if [ ! -d "build/App.xcarchive" ]; then
+            echo "ERROR: Archive was not created at build/App.xcarchive"
+            echo "Contents of build directory:"
+            ls -la build/ || echo "build directory doesn't exist"
+            exit 1
+          fi
+          echo "Archive created successfully at build/App.xcarchive"
       
       - name: Create ExportOptions.plist if needed
         run: |
@@ -114,12 +123,28 @@ jobs:
           EOF
           fi
       
+      - name: Verify archive exists before export
+        run: |
+          if [ ! -d "ios/App/build/App.xcarchive" ]; then
+            echo "ERROR: Archive not found at ios/App/build/App.xcarchive"
+            echo "Searching for archive files..."
+            find ios -name "*.xcarchive" -type d 2>/dev/null || echo "No .xcarchive files found"
+            echo "Contents of ios/App/build:"
+            ls -la ios/App/build/ 2>/dev/null || echo "ios/App/build directory doesn't exist"
+            exit 1
+          fi
+          echo "Archive found, proceeding with export..."
+      
       - name: Export IPA
         run: |
+          mkdir -p ios/App/build/export
           xcodebuild -exportArchive \
             -archivePath ios/App/build/App.xcarchive \
             -exportPath ios/App/build/export \
             -exportOptionsPlist ios/App/ExportOptions.plist
+          # Verify IPA was created
+          echo "Checking for exported IPA..."
+          ls -lh ios/App/build/export/*.ipa || echo "IPA file not found in export directory"
       
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
